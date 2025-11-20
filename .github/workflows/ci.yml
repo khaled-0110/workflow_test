@@ -1,0 +1,47 @@
+name: Airflow DAG Test
+
+on:
+  push:
+    branches: [main, airflow]
+  pull_request:
+
+jobs:
+  dag-test:
+    runs-on: ubuntu-latest
+    container:
+      image: python:3.12-bullseye
+      options: --entrypoint /bin/bash
+    env:
+      AIRFLOW_HOME: /github/home/airflow
+      ROOT_DIR: ${{ github.workspace }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Show environment info
+        run: |
+          echo "ROOT_DIR=$ROOT_DIR"
+          ldd --version | head -n1
+          python --version
+
+      - name: Install dependencies
+        run: |
+          apt-get update && apt-get install -y build-essential
+          pip install --upgrade pip
+          pip install "apache-airflow[celery]==2.10.5" --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.5/constraints-3.8.txt"
+          pip install -r requirements.txt
+
+      - name: Initialize Airflow database
+        run: airflow db init
+        
+      - name: Pre testing dags
+        run: |
+          echo "Current directory:"
+          pwd
+          python dags/tweets_classification_pipeline.py
+          echo "Listing Airflow DAGs:"
+          airflow dags list
+
+      - name: Run DAG integrity test
+        run: pytest tests/test_dag_integrity.py
